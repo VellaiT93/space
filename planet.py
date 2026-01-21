@@ -1,4 +1,4 @@
-import math
+import math;
 
 class Planet:
     def __init__(self, canvas, center_x, center_y, gravity=0.2, rotation_speed=2, z=0):
