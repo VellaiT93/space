@@ -1,7 +1,7 @@
-import tkinter as tk
+import pygame
 import random
 import math
-import time
+import sys
 
 # --- Camera and objects ---
 class Camera:
@@ -28,21 +28,16 @@ class Planet:
         self.x += math.cos(self.angle) * 0.5
         self.y += math.sin(self.angle) * 0.5
 
-# --- Main Space Game ---
+# --- Space Game in pygame ---
 class SpaceGame:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("2D Space Explorer")
-        self.root.state("zoomed")  # maximized window with X button
-
-        self.last_time = time.time()
+    def __init__(self):
+        pygame.init()
+        self.clock = pygame.time.Clock()
         self.fps = 0
 
-        # Dynamic canvas size
-        self.width = self.root.winfo_screenwidth()
-        self.height = self.root.winfo_screenheight()
-        self.canvas = tk.Canvas(root, width=self.width, height=self.height, bg="black")
-        self.canvas.pack(fill=tk.BOTH, expand=True)
+        # Fullscreen
+        self.screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+        self.width, self.height = self.screen.get_size()
 
         # Camera
         self.camera = Camera()
@@ -50,103 +45,97 @@ class SpaceGame:
         # Axes
         self.show_axes = True
 
-        # Sun in the center
-        self.sun_radius = 150
+        # Sun
+        self.sun_radius = 50
 
-        # Stars (large map)
+        # Stars
         self.num_stars = 1000
         self.stars = [Star(random.randint(-5000, 5000), random.randint(-5000, 5000)) for _ in range(self.num_stars)]
-        self.star_ids = []
-
-        # Draw stars once and keep IDs
-        for star in self.stars:
-            sx, sy, scale = self.project(star.x, star.y)
-            size = max(1, int(2*scale))
-            star_id = self.canvas.create_oval(sx-size, sy-size, sx+size, sy+size, fill="white", outline="")
-            self.star_ids.append(star_id)
 
         # Planets
         self.planets = [Planet(random.randint(-2000, 2000), random.randint(-2000, 2000),
                                radius=random.randint(10, 40)) for _ in range(50)]
 
-        # Bind keys for movement
-        self.root.bind("<w>", lambda e: setattr(self.camera, 'y', self.camera.y - 50))
-        self.root.bind("<s>", lambda e: setattr(self.camera, 'y', self.camera.y + 50))
-        self.root.bind("<a>", lambda e: setattr(self.camera, 'x', self.camera.x - 50))
-        self.root.bind("<d>", lambda e: setattr(self.camera, 'x', self.camera.x + 50))
-        self.root.bind("<q>", lambda e: setattr(self.camera, 'z', max(10, self.camera.z - 10)))
-        self.root.bind("<e>", lambda e: setattr(self.camera, 'z', self.camera.z + 10))
-        self.root.bind("<x>", lambda e: self.toggle_axes())
-        self.root.bind("<Escape>", lambda e: self.root.destroy())
+        # Fonts
+        self.font = pygame.font.SysFont("Arial", 24)
 
-        # Track last Z to update star size
-        self.last_z = self.camera.z
-
-        # Start loop
-        self.loop()
-
-    def toggle_axes(self):
-        self.show_axes = not self.show_axes
+        self.run_game()
 
     def project(self, x, y):
         """Project world coordinates to screen coordinates with simple scaling by camera.z"""
         scale = 200 / self.camera.z
-        sx = (x - self.camera.x) * scale + self.width / 2
-        sy = (y - self.camera.y) * scale + self.height / 2
+        sx = int((x - self.camera.x) * scale + self.width / 2)
+        sy = int((y - self.camera.y) * scale + self.height / 2)
         return sx, sy, scale
 
-    def loop(self):
-        # --- Calculate FPS ---
-        current_time = time.time()
-        dt = current_time - self.last_time
-        if dt > 0:
-            self.fps = 1 / dt
-        self.last_time = current_time
+    def run_game(self):
+        running = True
+        while running:
+            dt = self.clock.tick(60) / 1000.0
+            self.fps = self.clock.get_fps()
 
-        # --- Update canvas size ---
-        self.width = self.root.winfo_width()
-        self.height = self.root.winfo_height()
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        running = False
+                    if event.key == pygame.K_x:
+                        self.show_axes = not self.show_axes
 
-        # --- Update star positions and size ---
-        for i, star in enumerate(self.stars):
-            sx, sy, scale = self.project(star.x, star.y)
-            size = max(1, int(2*200/self.camera.z))
-            self.canvas.coords(self.star_ids[i], sx-size, sy-size, sx+size, sy+size)
+            # --- Handle key states for smooth movement ---
+            keys = pygame.key.get_pressed()
+            if keys[pygame.K_w]:
+                self.camera.y -= 500 * dt
+            if keys[pygame.K_s]:
+                self.camera.y += 500 * dt
+            if keys[pygame.K_a]:
+                self.camera.x -= 500 * dt
+            if keys[pygame.K_d]:
+                self.camera.x += 500 * dt
+            if keys[pygame.K_q]:
+                self.camera.z = max(10, self.camera.z - 200 * dt)
+            if keys[pygame.K_e]:
+                self.camera.z += 200 * dt
 
-        # --- Clear dynamic objects ---
-        self.canvas.delete("dynamic")
+            # --- Draw background ---
+            self.screen.fill((0, 0, 0))
 
-        # --- Draw sun ---
-        sx, sy, scale = self.project(0, 0)
-        sun_size = int(self.sun_radius * 200 / self.camera.z)
-        self.canvas.create_oval(sx-sun_size, sy-sun_size, sx+sun_size, sy+sun_size,
-                                fill="orange", outline="", tags="dynamic")
+            # --- Draw stars ---
+            for star in self.stars:
+                sx, sy, scale = self.project(star.x, star.y)
+                size = max(1, int(2 * 200 / self.camera.z))
+                if 0 <= sx < self.width and 0 <= sy < self.height:
+                    pygame.draw.circle(self.screen, (255, 255, 255), (sx, sy), size)
 
-        # --- Draw planets ---
-        for planet in self.planets:
-            planet.update()
-            sx, sy, scale = self.project(planet.x, planet.y)
-            size = max(2, int(planet.radius * 200 / self.camera.z))
-            self.canvas.create_oval(sx-size, sy-size, sx+size, sy+size, fill="blue", outline="", tags="dynamic")
+            # --- Draw sun ---
+            sx, sy, scale = self.project(0, 0)
+            sun_size = int(self.sun_radius * 200 / self.camera.z)
+            pygame.draw.circle(self.screen, (255, 165, 0), (sx, sy), sun_size)
 
-        # --- Draw axes ---
-        if self.show_axes:
-            cx, cy, _ = self.project(0, 0)
-            self.canvas.create_line(0, cy, self.width, cy, fill="red", width=2, tags="dynamic")    # X-axis
-            self.canvas.create_line(cx, 0, cx, self.height, fill="green", width=2, tags="dynamic")  # Y-axis
-            self.canvas.create_line(cx, cy, cx + 100, cy + 100, fill="blue", width=2, tags="dynamic")  # Z-line
+            # --- Draw planets ---
+            for planet in self.planets:
+                planet.update()
+                sx, sy, scale = self.project(planet.x, planet.y)
+                size = max(2, int(planet.radius * 200 / self.camera.z))
+                pygame.draw.circle(self.screen, (0, 0, 255), (sx, sy), size)
 
-        # --- Draw coordinates + FPS ---
-        self.canvas.create_text(
-            10, 10, anchor="nw", fill="white",
-            text=f"X: {int(self.camera.x)}  Y: {int(self.camera.y)}  Z: {int(self.camera.z)}  FPS: {int(self.fps)}",
-            font=("Arial", 14), tags="dynamic"
-        )
+            # --- Draw axes ---
+            if self.show_axes:
+                cx, cy, _ = self.project(0, 0)
+                pygame.draw.line(self.screen, (255, 0, 0), (0, cy), (self.width, cy), 2)  # X-axis
+                pygame.draw.line(self.screen, (0, 255, 0), (cx, 0), (cx, self.height), 2)  # Y-axis
+                pygame.draw.line(self.screen, (0, 0, 255), (cx, cy), (cx + 100, cy + 100), 2)  # Z-line
 
-        # --- Schedule next frame ---
-        self.root.after(16, self.loop)
+            # --- Draw coordinates + FPS ---
+            text = self.font.render(f"X: {int(self.camera.x)} Y: {int(self.camera.y)} Z: {int(self.camera.z)} FPS: {int(self.fps)}", True, (255, 255, 255))
+            self.screen.blit(text, (10, 10))
+
+            pygame.display.flip()
+
+        pygame.quit()
+        sys.exit()
+
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    game = SpaceGame(root)
-    root.mainloop()
+    SpaceGame()
